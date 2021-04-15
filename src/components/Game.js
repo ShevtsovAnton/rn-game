@@ -1,18 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Text, Button } from 'react-native';
 import RandomNumber from './RandomNumber';
+import shuffle from 'lodash.shuffle';
 
-export default function Game({ randomNumberCount }) {
+export default function Game({ randomNumberCount, initialSeconds, resetGame }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [randomNumbers, setRandomNumbers] = useState([]);
+  const [shuffledNumbers, setShuffledNumbers] = useState([]);
   const [target, setTarget] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState(initialSeconds);
+  const [timer, setTimer] = useState(0);
 
   useEffect(() => {
-    setRandomNumbers(
-      Array.from({ length: randomNumberCount }).map(
-        () => 1 + Math.floor(10 * Math.random())
-      )
+    const randomNumbers = Array.from({ length: randomNumberCount }).map(
+      () => 1 + Math.floor(10 * Math.random())
     );
+    setRandomNumbers([...randomNumbers]);
+    setShuffledNumbers(shuffle(randomNumbers));
   }, []);
 
   useEffect(() => {
@@ -22,6 +26,22 @@ export default function Game({ randomNumberCount }) {
         .reduce((acc, curr) => acc + curr, 0)
     );
   }, [randomNumbers]);
+
+  useEffect(() => {
+    const int = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        const next = prev - 1;
+        if (next === 0) {
+          clearInterval(timer);
+        }
+        return next;
+      });
+    }, 1000);
+    setTimer(int);
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
 
   const isNumberSelected = (numberIndex) => {
     return selectedIds.indexOf(numberIndex) >= 0;
@@ -33,25 +53,40 @@ export default function Game({ randomNumberCount }) {
 
   const gameStatus = () => {
     const sumSelected = selectedIds.reduce((acc, curr) => {
-      return acc + randomNumbers[curr];
+      return acc + shuffledNumbers[curr];
     }, 0);
+    if (remainingSeconds === 0 || sumSelected > target) {
+      clearInterval(timer);
+      return 'LOST';
+    }
     if (sumSelected < target) {
       return 'PLAYING';
     }
     if (sumSelected === target) {
+      clearInterval(timer);
       return 'WON';
     }
-    if (sumSelected > target) {
-      return 'LOST';
-    }
   };
-  const status = gameStatus();
+  let status = 'PLAYING';
 
+  const prevSelectedIdsRef = useRef();
+  useEffect(() => {
+    prevSelectedIdsRef.current = [...selectedIds];
+  });
+  const prevSelectedIds = prevSelectedIdsRef.current;
+
+  if (
+    (typeof prevSelectedIds !== 'undefined' &&
+      prevSelectedIds.length !== selectedIds.length) ||
+    remainingSeconds === 0
+  ) {
+    status = gameStatus();
+  }
   return (
     <View style={styles.container}>
       <Text style={[styles.target, styles[`STATUS_${status}`]]}>{target}</Text>
       <View style={styles.randomContainer}>
-        {randomNumbers.map((randomNumber, i) => (
+        {shuffledNumbers.map((randomNumber, i) => (
           <RandomNumber
             key={i}
             id={i}
@@ -61,7 +96,8 @@ export default function Game({ randomNumberCount }) {
           />
         ))}
       </View>
-      <Text>{status}</Text>
+      <Button onPress={resetGame} title='Play Again'></Button>
+      <Text>{remainingSeconds}</Text>
     </View>
   );
 }
